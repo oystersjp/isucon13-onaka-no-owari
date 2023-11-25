@@ -117,8 +117,13 @@ type PostIconResponse struct {
 //	return c.Blob(http.StatusOK, "image/jpeg", image)
 //}
 
+type cacheItem struct {
+	hash       string
+	expiryTime time.Time
+}
+
 var (
-	iconHashCache = make(map[string]string)
+	iconHashCache = make(map[string]cacheItem)
 	cacheMutex    sync.RWMutex
 )
 
@@ -129,11 +134,14 @@ func getIconHandler(c echo.Context) error {
 	ifNoneMatch := c.Request().Header.Get("If-None-Match")
 
 	cacheMutex.RLock()
-	t, found := iconHashCache[ifNoneMatch]
+	item, found := iconHashCache[username]
 	cacheMutex.RUnlock()
-	fmt.Println("icon:" + t)
+
 	fmt.Println("icon:", found)
 	fmt.Println("icon:", ifNoneMatch)
+	if ifNoneMatch != "" && found && time.Now().Before(item.expiryTime) {
+		return c.NoContent(http.StatusNotModified)
+	}
 	if found {
 		return c.NoContent(http.StatusNotModified)
 	}
@@ -163,7 +171,10 @@ func getIconHandler(c echo.Context) error {
 
 	iconHash := sha256.Sum256(image)
 	cacheMutex.Lock()
-	iconHashCache[fmt.Sprintf("%x", iconHash)] = "存在したよ"
+	iconHashCache[username] = cacheItem{
+		hash:       fmt.Sprintf("%x", iconHash),
+		expiryTime: time.Now().Add(1 * time.Second), // 1秒後に期限切れ
+	}
 	cacheMutex.Unlock()
 
 	return c.Blob(http.StatusOK, "image/jpeg", image)
@@ -469,7 +480,10 @@ func fillUserResponse(ctx context.Context, tx *sqlx.Tx, userModel UserModel) (Us
 	}
 	iconHash := sha256.Sum256(image)
 	cacheMutex.Lock()
-	iconHashCache[fmt.Sprintf("%x", iconHash)] = "存在したよ"
+	iconHashCache[userModel.Name] = cacheItem{
+		hash:       fmt.Sprintf("%x", iconHash),
+		expiryTime: time.Now().Add(1 * time.Second), // 1秒後に期限切れ
+	}
 	cacheMutex.Unlock()
 	user := User{
 		ID:          userModel.ID,

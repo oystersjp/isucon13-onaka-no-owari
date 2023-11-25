@@ -128,6 +128,9 @@ func getIconHandler(c echo.Context) error {
 
 	ifNoneMatch := c.Request().Header.Get("If-None-Match")
 
+	fmt.Print("--------")
+	fmt.Print(ifNoneMatch)
+	fmt.Print("--------")
 	cacheMutex.RLock()
 	_, found := iconHashCache[ifNoneMatch]
 	cacheMutex.RUnlock()

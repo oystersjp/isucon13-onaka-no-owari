@@ -8,12 +8,14 @@ build:
 stop-services:
 	sudo systemctl stop nginx
 	sudo systemctl stop isupipe-go.service
+	sudo systemctl stop pdns.service
 	sudo systemctl stop mysql
 
 start-services:
 	sudo systemctl start mysql
 	sleep 5
 	sudo systemctl start isupipe-go.service
+	sudo systemctl start pdns.service
 	sudo systemctl start nginx
 
 truncate-logs:

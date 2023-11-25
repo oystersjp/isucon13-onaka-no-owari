@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -85,10 +86,61 @@ type PostIconResponse struct {
 	ID int64 `json:"id"`
 }
 
+//func getIconHandler(c echo.Context) error {
+//	ctx := c.Request().Context()
+//
+//	username := c.Param("username")
+//
+//	tx, err := dbConn.BeginTxx(ctx, nil)
+//	if err != nil {
+//		return echo.NewHTTPError(http.StatusInternalServerError, "failed to begin transaction: "+err.Error())
+//	}
+//	defer tx.Rollback()
+//
+//	var user UserModel
+//	if err := tx.GetContext(ctx, &user, "SELECT * FROM users WHERE name = ?", username); err != nil {
+//		if errors.Is(err, sql.ErrNoRows) {
+//			return echo.NewHTTPError(http.StatusNotFound, "not found user that has the given username")
+//		}
+//		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get user: "+err.Error())
+//	}
+//
+//	var image []byte
+//	if err := tx.GetContext(ctx, &image, "SELECT image FROM icons WHERE user_id = ?", user.ID); err != nil {
+//		if errors.Is(err, sql.ErrNoRows) {
+//			return c.File(fallbackImage)
+//		} else {
+//			return echo.NewHTTPError(http.StatusInternalServerError, "failed to get user icon: "+err.Error())
+//		}
+//	}
+//
+//	return c.Blob(http.StatusOK, "image/jpeg", image)
+//}
+
+type cacheItem struct {
+	user       User
+	expiryTime time.Time
+}
+
+var (
+	iconHashCache = make(map[string]cacheItem)
+	cacheMutex    sync.RWMutex
+)
+
 func getIconHandler(c echo.Context) error {
 	ctx := c.Request().Context()
-
 	username := c.Param("username")
+	ifNoneMatch := c.Request().Header.Get("If-None-Match")
+
+	cacheMutex.RLock()
+	item, found := iconHashCache[username]
+	cacheMutex.RUnlock()
+
+	fmt.Println("icon:", found)
+	fmt.Println("icon:", ifNoneMatch)
+	if found && item.user.IconHash == ifNoneMatch && time.Now().Before(item.expiryTime) {
+		return c.NoContent(http.StatusNotModified)
+	}
 
 	tx, err := dbConn.BeginTxx(ctx, nil)
 	if err != nil {
@@ -399,6 +451,14 @@ func verifyUserSession(c echo.Context) error {
 }
 
 func fillUserResponse(ctx context.Context, tx *sqlx.Tx, userModel UserModel) (User, error) {
+	cacheMutex.RLock()
+	item, found := iconHashCache[userModel.Name]
+	cacheMutex.RUnlock()
+
+	if found && time.Now().Before(item.expiryTime) {
+		return item.user, nil
+	}
+
 	themeModel := ThemeModel{}
 	if err := tx.GetContext(ctx, &themeModel, "SELECT * FROM themes WHERE user_id = ?", userModel.ID); err != nil {
 		return User{}, err
@@ -415,7 +475,6 @@ func fillUserResponse(ctx context.Context, tx *sqlx.Tx, userModel UserModel) (Us
 		}
 	}
 	iconHash := sha256.Sum256(image)
-
 	user := User{
 		ID:          userModel.ID,
 		Name:        userModel.Name,
@@ -428,5 +487,11 @@ func fillUserResponse(ctx context.Context, tx *sqlx.Tx, userModel UserModel) (Us
 		IconHash: fmt.Sprintf("%x", iconHash),
 	}
 
+	cacheMutex.Lock()
+	iconHashCache[userModel.Name] = cacheItem{
+		user:       user,
+		expiryTime: time.Now().Add(1 * time.Second),
+	}
+	cacheMutex.Unlock()
 	return user, nil
 }

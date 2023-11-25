@@ -93,31 +93,52 @@ func getUserStatisticsHandler(c echo.Context) error {
 	}
 
 	var ranking UserRanking
+	type UserScores struct {
+		UserID    int64 `db:"user_id"`
+		Reactions int64 `db:"reactions"`
+		Tips      int64 `db:"tips"`
+	}
+	userScoresMap := make(map[int64]*UserScores)
 	for _, user := range users {
-		var reactions int64
-		query := `
-		SELECT COUNT(*) FROM users u
-		INNER JOIN livestreams l ON l.user_id = u.id
-		INNER JOIN reactions r ON r.livestream_id = l.id
-		WHERE u.id = ?`
-		if err := tx.GetContext(ctx, &reactions, query, user.ID); err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to count reactions: "+err.Error())
-		}
+		userScoresMap[user.ID] = &UserScores{UserID: user.ID}
+	}
 
-		var tips int64
-		query = `
-		SELECT IFNULL(SUM(l2.tip), 0) FROM users u
-		INNER JOIN livestreams l ON l.user_id = u.id	
-		INNER JOIN livecomments l2 ON l2.livestream_id = l.id
-		WHERE u.id = ?`
-		if err := tx.GetContext(ctx, &tips, query, user.ID); err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to count tips: "+err.Error())
-		}
+	// 最初に、全ユーザーのリアクション数を1つのクエリで集計
+	reactionsQuery := `
+SELECT u.id as user_id, COUNT(*) as reactions FROM users u
+INNER JOIN livestreams l ON l.user_id = u.id
+INNER JOIN reactions r ON r.livestream_id = l.id
+GROUP BY u.id`
+	var reactions []UserScores
+	if err := tx.SelectContext(ctx, &reactions, reactionsQuery); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to count reactions: "+err.Error())
+	}
+	// Map the reactions back to the users.
+	for _, score := range reactions {
+		userScoresMap[score.UserID].Reactions = score.Reactions
+	}
 
-		score := reactions + tips
+	// 次に全ユーザーのチップの合計を別の1つのクエリで集計
+	tipsQuery := `
+SELECT u.id as user_id, IFNULL(SUM(lc.tip), 0) as tips FROM users u
+INNER JOIN livestreams l ON l.user_id = u.id
+INNER JOIN livecomments lc ON lc.livestream_id = l.id
+GROUP BY u.id`
+	var tips []UserScores
+	if err := tx.SelectContext(ctx, &tips, tipsQuery); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to count tips: "+err.Error())
+	}
+	// Map the tips back to the users.
+	for _, score := range tips {
+		userScoresMap[score.UserID].Tips = score.Tips
+	}
+
+	// Now you have all the scores in userScoresMap, you can construct your ranking.
+	for _, user := range users {
+		score := userScoresMap[user.ID]
 		ranking = append(ranking, UserRankingEntry{
 			Username: user.Name,
-			Score:    score,
+			Score:    score.Reactions + score.Tips,
 		})
 	}
 	sort.Sort(ranking)

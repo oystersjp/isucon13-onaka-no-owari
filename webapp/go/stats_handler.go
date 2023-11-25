@@ -174,7 +174,7 @@ GROUP BY u.id`
 	statsQuery := `
 SELECT 
     livestream_id, 
-    COUNT(livecomment.id) AS livecomments_count, 
+    COUNT(livecomments.id) AS livecomments_count, 
     IFNULL(SUM(livecomment.tip), 0) AS total_tip
 FROM 
     livestreams 

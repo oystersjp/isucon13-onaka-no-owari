@@ -8,6 +8,7 @@ build:
 stop-services:
 	sudo systemctl stop nginx
 	sudo systemctl stop isupipe-go.service
+	ssh isucon-s2 "sudo systemctl stop isupipe-go.service"
 	sudo systemctl stop pdns.service
 	sudo systemctl stop mysql
 	ssh isucon-s3 "sudo systemctl stop mysql"
@@ -16,6 +17,8 @@ start-services:
 	ssh isucon-s3 "sudo systemctl start mysql"
 	sudo systemctl start mysql
 	sleep 2
+	scp webapp/go/isupipe isucon-s2:webapp/go/
+	ssh isucon-s2 "sudo systemctl start isupipe-go.service"
 	sudo systemctl start isupipe-go.service
 	sleep 1
 	sudo systemctl start pdns.service

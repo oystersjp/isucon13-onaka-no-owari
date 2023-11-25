@@ -118,7 +118,7 @@ type PostIconResponse struct {
 //}
 
 type cacheItem struct {
-	hash       string
+	user       User
 	expiryTime time.Time
 }
 
@@ -130,7 +130,6 @@ var (
 func getIconHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 	username := c.Param("username")
-
 	ifNoneMatch := c.Request().Header.Get("If-None-Match")
 
 	cacheMutex.RLock()
@@ -139,7 +138,7 @@ func getIconHandler(c echo.Context) error {
 
 	fmt.Println("icon:", found)
 	fmt.Println("icon:", ifNoneMatch)
-	if ifNoneMatch != "" && found && time.Now().Before(item.expiryTime) {
+	if found && item.user.IconHash == ifNoneMatch && time.Now().Before(item.expiryTime) {
 		return c.NoContent(http.StatusNotModified)
 	}
 
@@ -165,14 +164,6 @@ func getIconHandler(c echo.Context) error {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to get user icon: "+err.Error())
 		}
 	}
-
-	iconHash := sha256.Sum256(image)
-	cacheMutex.Lock()
-	iconHashCache[username] = cacheItem{
-		hash:       fmt.Sprintf("%x", iconHash),
-		expiryTime: time.Now().Add(1 * time.Second), // 1秒後に期限切れ
-	}
-	cacheMutex.Unlock()
 
 	return c.Blob(http.StatusOK, "image/jpeg", image)
 }
@@ -460,6 +451,14 @@ func verifyUserSession(c echo.Context) error {
 }
 
 func fillUserResponse(ctx context.Context, tx *sqlx.Tx, userModel UserModel) (User, error) {
+	cacheMutex.RLock()
+	item, found := iconHashCache[userModel.Name]
+	cacheMutex.RUnlock()
+
+	if found && time.Now().Before(item.expiryTime) {
+		return item.user, nil
+	}
+
 	themeModel := ThemeModel{}
 	if err := tx.GetContext(ctx, &themeModel, "SELECT * FROM themes WHERE user_id = ?", userModel.ID); err != nil {
 		return User{}, err
@@ -476,12 +475,6 @@ func fillUserResponse(ctx context.Context, tx *sqlx.Tx, userModel UserModel) (Us
 		}
 	}
 	iconHash := sha256.Sum256(image)
-	cacheMutex.Lock()
-	iconHashCache[userModel.Name] = cacheItem{
-		hash:       fmt.Sprintf("%x", iconHash),
-		expiryTime: time.Now().Add(1 * time.Second), // 1秒後に期限切れ
-	}
-	cacheMutex.Unlock()
 	user := User{
 		ID:          userModel.ID,
 		Name:        userModel.Name,
@@ -494,5 +487,11 @@ func fillUserResponse(ctx context.Context, tx *sqlx.Tx, userModel UserModel) (Us
 		IconHash: fmt.Sprintf("%x", iconHash),
 	}
 
+	cacheMutex.Lock()
+	iconHashCache[userModel.Name] = cacheItem{
+		user:       user,
+		expiryTime: time.Now().Add(1 * time.Second),
+	}
+	cacheMutex.Unlock()
 	return user, nil
 }

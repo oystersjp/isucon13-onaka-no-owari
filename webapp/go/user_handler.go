@@ -118,7 +118,7 @@ type PostIconResponse struct {
 //}
 
 var (
-	iconHashCache = make(map[string]int64)
+	iconHashCache = make(map[string]string)
 	cacheMutex    sync.RWMutex
 )
 
@@ -128,14 +128,13 @@ func getIconHandler(c echo.Context) error {
 
 	ifNoneMatch := c.Request().Header.Get("If-None-Match")
 
-	fmt.Print("--------")
-	fmt.Print(ifNoneMatch)
-	fmt.Print("--------")
 	cacheMutex.RLock()
-	_, found := iconHashCache[ifNoneMatch]
+	t, found := iconHashCache[ifNoneMatch]
 	cacheMutex.RUnlock()
-
+	fmt.Println(found)
 	if found {
+		fmt.Println(t)
+		fmt.Println(found)
 		return c.NoContent(http.StatusNotModified)
 	}
 
@@ -166,7 +165,7 @@ func getIconHandler(c echo.Context) error {
 	iconHash := fmt.Sprintf("%x", hash)
 
 	cacheMutex.Lock()
-	iconHashCache[iconHash] = 1
+	iconHashCache[iconHash] = "存在したよ"
 	cacheMutex.Unlock()
 
 	return c.Blob(http.StatusOK, "image/jpeg", image)

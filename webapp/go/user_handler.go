@@ -161,11 +161,9 @@ func getIconHandler(c echo.Context) error {
 		}
 	}
 
-	hash := sha256.Sum256(image)
-	iconHash := fmt.Sprintf("%x", hash)
-
+	iconHash := sha256.Sum256(image)
 	cacheMutex.Lock()
-	iconHashCache[iconHash] = "存在したよ"
+	iconHashCache[fmt.Sprintf("%x", iconHash)] = "存在したよ"
 	cacheMutex.Unlock()
 
 	return c.Blob(http.StatusOK, "image/jpeg", image)
@@ -470,7 +468,9 @@ func fillUserResponse(ctx context.Context, tx *sqlx.Tx, userModel UserModel) (Us
 		}
 	}
 	iconHash := sha256.Sum256(image)
-
+	cacheMutex.Lock()
+	iconHashCache[fmt.Sprintf("%x", iconHash)] = "存在したよ"
+	cacheMutex.Unlock()
 	user := User{
 		ID:          userModel.ID,
 		Name:        userModel.Name,

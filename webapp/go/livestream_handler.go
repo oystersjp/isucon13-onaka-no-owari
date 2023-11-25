@@ -540,10 +540,28 @@ func fillLivestreamResponse(ctx context.Context, tx *sqlx.Tx, livestreamModel Li
 }
 
 func fillLivestreamResponses(ctx context.Context, tx *sqlx.Tx, livestreamModels []*LivestreamModel) ([]Livestream, error) {
-	// ライブストリームIDのリストを作成
 	livestreamIDs := make([]int64, len(livestreamModels))
+	// ユーザーIDのリストを作成
+	userIds := make([]int64, len(livestreamModels))
 	for i, model := range livestreamModels {
 		livestreamIDs[i] = model.ID
+		userIds[i] = model.UserID
+	}
+
+	// ユーザー情報を一度のクエリで取得
+	var userModels []UserModel
+	userQuery, userArgs, err := sqlx.In("SELECT * FROM users WHERE id IN (?)", userIds)
+	if err != nil {
+		return nil, err
+	}
+	userQuery = tx.Rebind(userQuery)
+	if err := tx.SelectContext(ctx, &userModels, userQuery, userArgs...); err != nil {
+		return nil, err
+	}
+	// 結果をマップに格納
+	userMap := make(map[int64]UserModel)
+	for _, um := range userModels {
+		userMap[um.ID] = um
 	}
 
 	// 一度のクエリで全てのライブストリームタグを取得
@@ -583,6 +601,16 @@ func fillLivestreamResponses(ctx context.Context, tx *sqlx.Tx, livestreamModels 
 	// ライブストリームのリストを作成
 	livestreams := make([]Livestream, len(livestreamModels))
 	for i, model := range livestreamModels {
+		// ユーザー情報の取得
+		userModel, ok := userMap[model.UserID]
+		if !ok {
+			return nil, fmt.Errorf("user with id %d not found", model.UserID)
+		}
+		user, err := fillUserResponse(ctx, tx, userModel)
+		if err != nil {
+			return nil, err
+		}
+
 		// 各ライブストリームのタグを取得
 		var tags []Tag
 		for _, tagModel := range livestreamTagModels {
@@ -593,9 +621,15 @@ func fillLivestreamResponses(ctx context.Context, tx *sqlx.Tx, livestreamModels 
 
 		// ライブストリームオブジェクトの作成
 		livestreams[i] = Livestream{
-			ID: model.ID,
-			// 他のフィールドも同様に設定...
-			Tags: tags,
+			ID:           model.ID,
+			Owner:        user,
+			Title:        model.Title,
+			Tags:         tags,
+			Description:  model.Description,
+			PlaylistUrl:  model.PlaylistUrl,
+			ThumbnailUrl: model.ThumbnailUrl,
+			StartAt:      model.StartAt,
+			EndAt:        model.EndAt,
 		}
 	}
 

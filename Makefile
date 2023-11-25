@@ -13,9 +13,11 @@ stop-services:
 
 start-services:
 	sudo systemctl start mysql
-	sleep 5
+	sleep 2
 	sudo systemctl start isupipe-go.service
+	sleep 1
 	sudo systemctl start pdns.service
+	sleep 1
 	sudo systemctl start nginx
 
 truncate-logs:

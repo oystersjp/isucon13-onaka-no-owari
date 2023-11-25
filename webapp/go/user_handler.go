@@ -448,7 +448,10 @@ func fillUserResponse(ctx context.Context, tx *sqlx.Tx, userModel UserModel) (Us
 	//}
 
 	cacheMutex.RLock()
-	fileName, _ := iconHashCache[userModel.ID]
+	fileName, found := iconHashCache[userModel.ID]
+	if !found {
+		return User{}, fmt.Errorf("icon hash not found")
+	}
 
 	cacheMutex.RUnlock()
 	iconFilePath := fileName

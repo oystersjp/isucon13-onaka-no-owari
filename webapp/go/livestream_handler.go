@@ -485,46 +485,58 @@ func getLivecommentReportsHandler(c echo.Context) error {
 }
 
 func fillLivestreamResponse(ctx context.Context, tx *sqlx.Tx, livestreamModel LivestreamModel) (Livestream, error) {
-	ownerModel := UserModel{}
-	if err := tx.GetContext(ctx, &ownerModel, "SELECT * FROM users WHERE id = ?", livestreamModel.UserID); err != nil {
-		return Livestream{}, err
-	}
-	owner, err := fillUserResponse(ctx, tx, ownerModel)
-	if err != nil {
-		return Livestream{}, err
+	type livestreamTagResult struct {
+		LivestreamModel
+		TagID   sql.NullInt64  `db:"tag_id"`
+		TagName sql.NullString `db:"tag_name"`
 	}
 
-	// タグ情報を含むライブストリームのモデル
-	type LivestreamWithTags struct {
-		LivestreamModel
-		Tags []Tag `db:"tags"`
-	}
-	// ライブストリームとタグの情報を取得するクエリ
+	// Execute the query to get livestream and associated tags.
+	var results []livestreamTagResult
 	query := `
-SELECT l.*, t.id "tags.id", t.name "tags.name"
+SELECT l.*, t.id AS tag_id, t.name AS tag_name
 FROM livestreams l
 LEFT JOIN livestream_tags lt ON lt.livestream_id = l.id
 LEFT JOIN tags t ON t.id = lt.tag_id
 WHERE l.id = ?
 `
-	// クエリ実行
-	var livestreamWithTags LivestreamWithTags
-	err = tx.GetContext(ctx, &livestreamWithTags, query, livestreamModel.ID)
+	err := tx.SelectContext(ctx, &results, query, livestreamModel.ID)
 	if err != nil {
 		return Livestream{}, err
 	}
-	// 結果をLivestream構造体に割り当て
+	if len(results) == 0 {
+		return Livestream{}, sql.ErrNoRows
+	}
+
+	livestreamData := results[0].LivestreamModel
+
+	var tags []Tag
+	for _, result := range results {
+		if result.TagID.Valid {
+			tags = append(tags, Tag{
+				ID:   result.TagID.Int64,
+				Name: result.TagName.String,
+			})
+		}
+	}
+
+	owner, err := fillUserResponse(ctx, tx, UserModel{ID: livestreamData.UserID})
+	if err != nil {
+		return Livestream{}, err
+	}
+
 	livestream := Livestream{
-		ID:           livestreamWithTags.ID,
+		ID:           livestreamData.ID,
 		Owner:        owner,
-		Title:        livestreamWithTags.Title,
-		Description:  livestreamWithTags.Description,
-		PlaylistUrl:  livestreamWithTags.PlaylistUrl,
-		ThumbnailUrl: livestreamWithTags.ThumbnailUrl,
-		StartAt:      livestreamWithTags.StartAt,
-		EndAt:        livestreamWithTags.EndAt,
-		Tags:         livestreamWithTags.Tags,
+		Title:        livestreamData.Title,
+		Description:  livestreamData.Description,
+		PlaylistUrl:  livestreamData.PlaylistUrl,
+		ThumbnailUrl: livestreamData.ThumbnailUrl,
+		StartAt:      livestreamData.StartAt,
+		EndAt:        livestreamData.EndAt,
+		Tags:         tags,
 	}
 
 	return livestream, nil
+
 }

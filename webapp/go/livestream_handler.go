@@ -503,7 +503,7 @@ func fillLivestreamResponse(ctx context.Context, tx *sqlx.Tx, livestreamModel Li
 SELECT l.*, t.id AS tag_id, t.name AS tag_name
 FROM livestreams l
 LEFT JOIN livestream_tags lt ON lt.livestream_id = l.id
-LEFT JOIN tags t ON t.id = lt.tag_id
+INNER JOIN tags t ON t.id = lt.tag_id
 WHERE l.id = ?
 `
 	err = tx.SelectContext(ctx, &results, query, livestreamModel.ID)
@@ -533,11 +533,9 @@ WHERE l.id = ?
 		Description:  livestreamData.Description,
 		PlaylistUrl:  livestreamData.PlaylistUrl,
 		ThumbnailUrl: livestreamData.ThumbnailUrl,
+		Tags:         tags,
 		StartAt:      livestreamData.StartAt,
 		EndAt:        livestreamData.EndAt,
-		Tags:         tags,
 	}
-
 	return livestream, nil
-
 }

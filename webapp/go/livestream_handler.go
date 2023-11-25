@@ -499,29 +499,37 @@ func fillLivestreamResponse(ctx context.Context, tx *sqlx.Tx, livestreamModel Li
 		return Livestream{}, err
 	}
 
-	tags := make([]Tag, len(livestreamTagModels))
-	for i := range livestreamTagModels {
-		tagModel := TagModel{}
-		if err := tx.GetContext(ctx, &tagModel, "SELECT * FROM tags WHERE id = ?", livestreamTagModels[i].TagID); err != nil {
-			return Livestream{}, err
-		}
-
-		tags[i] = Tag{
-			ID:   tagModel.ID,
-			Name: tagModel.Name,
-		}
+	// タグ情報を含むライブストリームのモデル
+	type LivestreamWithTags struct {
+		LivestreamModel
+		Tags []Tag `db:"tags"`
 	}
-
+	// ライブストリームとタグの情報を取得するクエリ
+	query := `
+SELECT l.*, t.id "tags.id", t.name "tags.name"
+FROM livestreams l
+LEFT JOIN livestream_tags lt ON lt.livestream_id = l.id
+LEFT JOIN tags t ON t.id = lt.tag_id
+WHERE l.id = ?
+`
+	// クエリ実行
+	var livestreamWithTags LivestreamWithTags
+	err = tx.GetContext(ctx, &livestreamWithTags, query, livestreamModel.ID)
+	if err != nil {
+		return Livestream{}, err
+	}
+	// 結果をLivestream構造体に割り当て
 	livestream := Livestream{
-		ID:           livestreamModel.ID,
+		ID:           livestreamWithTags.ID,
 		Owner:        owner,
-		Title:        livestreamModel.Title,
-		Tags:         tags,
-		Description:  livestreamModel.Description,
-		PlaylistUrl:  livestreamModel.PlaylistUrl,
-		ThumbnailUrl: livestreamModel.ThumbnailUrl,
-		StartAt:      livestreamModel.StartAt,
-		EndAt:        livestreamModel.EndAt,
+		Title:        livestreamWithTags.Title,
+		Description:  livestreamWithTags.Description,
+		PlaylistUrl:  livestreamWithTags.PlaylistUrl,
+		ThumbnailUrl: livestreamWithTags.ThumbnailUrl,
+		StartAt:      livestreamWithTags.StartAt,
+		EndAt:        livestreamWithTags.EndAt,
+		Tags:         livestreamWithTags.Tags,
 	}
+
 	return livestream, nil
 }

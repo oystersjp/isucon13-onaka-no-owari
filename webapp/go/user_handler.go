@@ -91,6 +91,11 @@ var (
 	cacheMutex    sync.RWMutex
 )
 
+var (
+	iconHashCache2  = make(map[string]string)
+	hacshCacheMutex sync.RWMutex
+)
+
 func getIconHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -108,6 +113,17 @@ func getIconHandler(c echo.Context) error {
 			return echo.NewHTTPError(http.StatusNotFound, "not found user that has the given username")
 		}
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get user: "+err.Error())
+	}
+
+	ifNoneMatch := c.Request().Header.Get("If-None-Match")
+
+	hacshCacheMutex.RLock()
+	_, found := iconHashCache2[ifNoneMatch]
+	hacshCacheMutex.RUnlock()
+
+	if found {
+		// Return 304 Not Modified if hash is found in cache
+		return c.NoContent(http.StatusNotModified)
 	}
 
 	cacheMutex.RLock()
@@ -464,7 +480,9 @@ func fillUserResponse(ctx context.Context, tx *sqlx.Tx, userModel UserModel) (Us
 		return User{}, err
 	}
 	iconHash := sha256.Sum256(image)
-
+	hacshCacheMutex.Lock()
+	iconHashCache2[fmt.Sprintf("%x", iconHash)] = fmt.Sprintf("%x", iconHash)
+	hacshCacheMutex.Unlock()
 	user := User{
 		ID:          userModel.ID,
 		Name:        userModel.Name,

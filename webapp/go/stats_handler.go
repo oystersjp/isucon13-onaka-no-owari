@@ -163,24 +163,39 @@ GROUP BY u.id`
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to count total reactions: "+err.Error())
 	}
 
-	// ライブコメント数、チップ合計
-	var totalLivecomments int64
-	var totalTip int64
-	var livestreams []*LivestreamModel
-	if err := tx.SelectContext(ctx, &livestreams, "SELECT * FROM livestreams WHERE user_id = ?", user.ID); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get livestreams: "+err.Error())
+	// ライブストリームに関連するコメント数とチップ合計を取得する構造体
+	type LivestreamStats struct {
+		LivestreamID      int64 `db:"livestream_id"`
+		LivecommentsCount int64 `db:"livecomments_count"`
+		TotalTip          int64 `db:"total_tip"`
 	}
 
-	for _, livestream := range livestreams {
-		var livecomments []*LivecommentModel
-		if err := tx.SelectContext(ctx, &livecomments, "SELECT * FROM livecomments WHERE livestream_id = ?", livestream.ID); err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to get livecomments: "+err.Error())
-		}
+	// ユーザーIDに基づいて全てのライブストリーム統計を取得するクエリ
+	statsQuery := `
+SELECT 
+    livestream_id, 
+    COUNT(livecomment.id) AS livecomments_count, 
+    IFNULL(SUM(livecomment.tip), 0) AS total_tip
+FROM 
+    livestreams 
+LEFT JOIN 
+    livecomments ON livecomments.livestream_id = livestreams.id
+WHERE 
+    livestreams.user_id = ?
+GROUP BY 
+    livestreams.id`
 
-		for _, livecomment := range livecomments {
-			totalTip += livecomment.Tip
-			totalLivecomments++
-		}
+	var stats []LivestreamStats
+	if err := tx.SelectContext(ctx, &stats, statsQuery, user.ID); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get livestream stats: "+err.Error())
+	}
+
+	// 統計情報から合計コメント数とチップを計算する
+	var totalLivecomments int64
+	var totalTip int64
+	for _, stat := range stats {
+		totalLivecomments += stat.LivecommentsCount
+		totalTip += stat.TotalTip
 	}
 
 	// 合計視聴者数

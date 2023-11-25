@@ -185,15 +185,16 @@ WHERE
 GROUP BY 
     livestreams.id`
 
-	var stats []LivestreamStats
-	if err := tx.SelectContext(ctx, &stats, statsQuery, user.ID); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get livestream stats: "+err.Error())
+	var livestreamStatsList []LivestreamStats
+	if err := tx.SelectContext(ctx, &livestreamStatsList, statsQuery, user.ID); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get livestream livestreamStatsList: "+err.Error())
 	}
 
 	// 統計情報から合計コメント数とチップを計算する
 	var totalLivecomments int64
 	var totalTip int64
-	for _, stat := range stats {
+	var livestreams []*LivestreamModel
+	for _, stat := range livestreamStatsList {
 		totalLivecomments += stat.LivecommentsCount
 		totalTip += stat.TotalTip
 	}

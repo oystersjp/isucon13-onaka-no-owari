@@ -441,10 +441,8 @@ func fillUserResponse(ctx context.Context, tx *sqlx.Tx, userModel UserModel) (Us
 	if !found {
 		image, err := os.ReadFile(fallbackImage)
 		if err != nil {
-			fmt.Println("デフォルト画像なかった")
 			return User{}, err
 		}
-		fmt.Println("デフォルト画像あった")
 		user := User{
 			ID:          userModel.ID,
 			Name:        userModel.Name,
@@ -463,7 +461,6 @@ func fillUserResponse(ctx context.Context, tx *sqlx.Tx, userModel UserModel) (Us
 	iconFilePath := fileName
 	image, err := os.ReadFile(iconFilePath)
 	if err != nil {
-		fmt.Println("画像ハッシュなかった")
 		return User{}, err
 	}
 	iconHash := sha256.Sum256(image)

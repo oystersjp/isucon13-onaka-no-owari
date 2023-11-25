@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -85,6 +86,11 @@ type PostIconResponse struct {
 	ID int64 `json:"id"`
 }
 
+var (
+	iconHashCache = make(map[int64]string)
+	cacheMutex    sync.RWMutex
+)
+
 func getIconHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -104,7 +110,13 @@ func getIconHandler(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get user: "+err.Error())
 	}
 
-	iconFilePath := "/tmp/icons/" + user.Name + ".jpg"
+	cacheMutex.RLock()
+	fileName, found := iconHashCache[user.ID]
+	if !found {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get user icon: "+err.Error())
+	}
+	cacheMutex.RUnlock()
+	iconFilePath := fileName
 	image, err := os.ReadFile(iconFilePath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -149,8 +161,11 @@ func postIconHandler(c echo.Context) error {
 
 	// 画像のハッシュ値を計算し、ファイル名として使用
 	iconHash := sha256.Sum256(req.Image)
-	iconFileName := fmt.Sprintf("%x", iconHash) + ".jpg"
-	iconFilePath := "/tmp/icons" + iconFileName
+	iconFileName := fmt.Sprintf("%x", iconHash)
+	iconFilePath := "/tmp/icons/" + iconFileName
+	cacheMutex.Lock()
+	iconHashCache[userID] = iconFilePath
+	cacheMutex.Unlock()
 
 	// 画像をファイルに保存
 	err = os.WriteFile(iconFilePath, req.Image, 0644)
@@ -422,22 +437,28 @@ func fillUserResponse(ctx context.Context, tx *sqlx.Tx, userModel UserModel) (Us
 	}
 
 	var image []byte
-	if err := tx.GetContext(ctx, &image, "SELECT image FROM icons WHERE user_id = ?", userModel.ID); err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
-			return User{}, err
-		}
-		image, err = os.ReadFile(fallbackImage)
-		if err != nil {
-			return User{}, err
-		}
-	}
+	//if err := tx.GetContext(ctx, &image, "SELECT image FROM icons WHERE user_id = ?", userModel.ID); err != nil {
+	//	if !errors.Is(err, sql.ErrNoRows) {
+	//		return User{}, err
+	//	}
+	//	image, err = os.ReadFile(fallbackImage)
+	//	if err != nil {
+	//		return User{}, err
+	//	}
+	//}
 
-	iconHash := sha256.Sum256(image)
-	iconFilePath := "/tmp/icons/" + fmt.Sprintf("%x", iconHash) + ".jpg"
-	err := os.WriteFile(iconFilePath, image, 0644)
+	cacheMutex.RLock()
+	fileName, _ := iconHashCache[userModel.ID]
+
+	cacheMutex.RUnlock()
+	iconFilePath := fileName
+	image, err := os.ReadFile(iconFilePath)
 	if err != nil {
-		return User{}, err
+		if errors.Is(err, os.ErrNotExist) {
+			return User{}, err
+		}
 	}
+	iconHash := sha256.Sum256(image)
 
 	user := User{
 		ID:          userModel.ID,

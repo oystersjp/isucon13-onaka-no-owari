@@ -165,7 +165,7 @@ func postIconHandler(c echo.Context) error {
 	// 画像のハッシュ値を計算し、ファイル名として使用
 	iconHash := sha256.Sum256(req.Image)
 	iconFileName := fmt.Sprintf("%x", iconHash)
-	iconFilePath := "/tmp/icons/" + iconFileName
+	iconFilePath := "/opt/icons/" + iconFileName
 	cacheMutex.Lock()
 	iconHashCache[userID] = iconFilePath
 	cacheMutex.Unlock()

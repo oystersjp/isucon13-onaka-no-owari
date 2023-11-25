@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
@@ -127,8 +129,10 @@ func getIconHandler(c echo.Context) error {
 	ifNoneMatch := c.Request().Header.Get("If-None-Match")
 
 	cacheMutex.RLock()
-	_, found := iconHashCache[ifNoneMatch]
+	t, found := iconHashCache[ifNoneMatch]
 	cacheMutex.RUnlock()
+	fmt.Println("icon:" + t)
+	fmt.Println("icon:", found)
 	if found {
 		return c.NoContent(http.StatusNotModified)
 	}
@@ -156,9 +160,9 @@ func getIconHandler(c echo.Context) error {
 		}
 	}
 
-	//iconHash := sha256.Sum256(image)
+	iconHash := sha256.Sum256(image)
 	cacheMutex.Lock()
-	iconHashCache[username] = "存在したよ"
+	iconHashCache[fmt.Sprintf("%x", iconHash)] = "存在したよ"
 	cacheMutex.Unlock()
 
 	return c.Blob(http.StatusOK, "image/jpeg", image)
@@ -462,9 +466,9 @@ func fillUserResponse(ctx context.Context, tx *sqlx.Tx, userModel UserModel) (Us
 			return User{}, err
 		}
 	}
-	//iconHash := sha256.Sum256(image)
+	iconHash := sha256.Sum256(image)
 	cacheMutex.Lock()
-	iconHashCache[userModel.Name] = "存在したよ"
+	iconHashCache[fmt.Sprintf("%x", iconHash)] = "存在したよ"
 	cacheMutex.Unlock()
 	user := User{
 		ID:          userModel.ID,
@@ -475,7 +479,7 @@ func fillUserResponse(ctx context.Context, tx *sqlx.Tx, userModel UserModel) (Us
 			ID:       themeModel.ID,
 			DarkMode: themeModel.DarkMode,
 		},
-		IconHash: userModel.Name,
+		IconHash: fmt.Sprintf("%x", iconHash),
 	}
 
 	return user, nil

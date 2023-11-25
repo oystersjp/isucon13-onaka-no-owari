@@ -167,6 +167,9 @@ func fillReactionResponse(ctx context.Context, tx *sqlx.Tx, reactionModel Reacti
 }
 
 func fillReactionsResponse(ctx context.Context, tx *sqlx.Tx, reactionModels []ReactionModel) ([]Reaction, error) {
+	if len(reactionModels) == 0 {
+		return []Reaction{}, nil
+	}
 	var reactions []Reaction
 	userIDs := make([]int64, len(reactionModels))
 	livestreamIDs := make([]int64, len(reactionModels))

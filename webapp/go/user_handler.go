@@ -437,23 +437,30 @@ func fillUserResponse(ctx context.Context, tx *sqlx.Tx, userModel UserModel) (Us
 	}
 
 	var image []byte
-	//if err := tx.GetContext(ctx, &image, "SELECT image FROM icons WHERE user_id = ?", userModel.ID); err != nil {
-	//	if !errors.Is(err, sql.ErrNoRows) {
-	//		return User{}, err
-	//	}
-	//	image, err = os.ReadFile(fallbackImage)
-	//	if err != nil {
-	//		return User{}, err
-	//	}
-	//}
 
 	cacheMutex.RLock()
 	fileName, found := iconHashCache[userModel.ID]
+	cacheMutex.RUnlock()
 	if !found {
-		return User{}, fmt.Errorf("icon hash not found")
+		image, err := os.ReadFile(fallbackImage)
+		if err != nil {
+			return User{}, err
+		}
+		user := User{
+			ID:          userModel.ID,
+			Name:        userModel.Name,
+			DisplayName: userModel.DisplayName,
+			Description: userModel.Description,
+			Theme: Theme{
+				ID:       themeModel.ID,
+				DarkMode: themeModel.DarkMode,
+			},
+			IconHash: fmt.Sprintf("%x", image),
+		}
+
+		return user, nil
 	}
 
-	cacheMutex.RUnlock()
 	iconFilePath := fileName
 	image, err := os.ReadFile(iconFilePath)
 	if err != nil {

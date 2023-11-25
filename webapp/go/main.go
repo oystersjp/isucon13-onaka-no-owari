@@ -115,6 +115,7 @@ func initializeHandler(c echo.Context) error {
 	}
 
 	c.Request().Header.Add("Content-Type", "application/json;charset=utf-8")
+	InitCache()
 	return c.JSON(http.StatusOK, InitializeResponse{
 		Language: "golang",
 	})

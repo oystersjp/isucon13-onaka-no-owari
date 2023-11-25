@@ -175,7 +175,7 @@ GROUP BY u.id`
 SELECT 
     livestream_id, 
     COUNT(livecomments.id) AS livecomments_count, 
-    IFNULL(SUM(livecomment.tip), 0) AS total_tip
+    IFNULL(SUM(livecomments.tip), 0) AS total_tip
 FROM 
     livestreams 
 LEFT JOIN 

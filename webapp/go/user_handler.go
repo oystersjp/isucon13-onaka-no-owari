@@ -142,9 +142,6 @@ func getIconHandler(c echo.Context) error {
 	if ifNoneMatch != "" && found && time.Now().Before(item.expiryTime) {
 		return c.NoContent(http.StatusNotModified)
 	}
-	if found {
-		return c.NoContent(http.StatusNotModified)
-	}
 
 	tx, err := dbConn.BeginTxx(ctx, nil)
 	if err != nil {

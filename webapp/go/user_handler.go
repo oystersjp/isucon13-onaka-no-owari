@@ -116,14 +116,11 @@ func getIconHandler(c echo.Context) error {
 	if !found {
 		return c.File(fallbackImage)
 	}
+
 	iconFilePath := fileName
 	image, err := os.ReadFile(iconFilePath)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return c.File(fallbackImage) // ファイルが存在しない場合はフォールバック画像を返す
-		} else {
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to get user icon: "+err.Error())
-		}
+		return c.File(fallbackImage)
 	}
 
 	return c.Blob(http.StatusOK, "image/jpeg", image)

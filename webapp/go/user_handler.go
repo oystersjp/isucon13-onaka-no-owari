@@ -133,6 +133,7 @@ func getIconHandler(c echo.Context) error {
 	cacheMutex.RUnlock()
 	fmt.Println("icon:" + t)
 	fmt.Println("icon:", found)
+	fmt.Println("icon:", ifNoneMatch)
 	if found {
 		return c.NoContent(http.StatusNotModified)
 	}

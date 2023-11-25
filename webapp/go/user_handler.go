@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -85,11 +86,59 @@ type PostIconResponse struct {
 	ID int64 `json:"id"`
 }
 
+//func getIconHandler(c echo.Context) error {
+//	ctx := c.Request().Context()
+//
+//	username := c.Param("username")
+//
+//	tx, err := dbConn.BeginTxx(ctx, nil)
+//	if err != nil {
+//		return echo.NewHTTPError(http.StatusInternalServerError, "failed to begin transaction: "+err.Error())
+//	}
+//	defer tx.Rollback()
+//
+//	var user UserModel
+//	if err := tx.GetContext(ctx, &user, "SELECT * FROM users WHERE name = ?", username); err != nil {
+//		if errors.Is(err, sql.ErrNoRows) {
+//			return echo.NewHTTPError(http.StatusNotFound, "not found user that has the given username")
+//		}
+//		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get user: "+err.Error())
+//	}
+//
+//	var image []byte
+//	if err := tx.GetContext(ctx, &image, "SELECT image FROM icons WHERE user_id = ?", user.ID); err != nil {
+//		if errors.Is(err, sql.ErrNoRows) {
+//			return c.File(fallbackImage)
+//		} else {
+//			return echo.NewHTTPError(http.StatusInternalServerError, "failed to get user icon: "+err.Error())
+//		}
+//	}
+//
+//	return c.Blob(http.StatusOK, "image/jpeg", image)
+//}
+
+var (
+	iconHashCache = make(map[string][]byte)
+	cacheMutex    sync.RWMutex
+)
+
 func getIconHandler(c echo.Context) error {
 	ctx := c.Request().Context()
-
 	username := c.Param("username")
 
+	// Check if If-None-Match header is present
+	ifNoneMatch := c.Request().Header.Get("If-None-Match")
+
+	cacheMutex.RLock()
+	_, found := iconHashCache[ifNoneMatch]
+	cacheMutex.RUnlock()
+
+	if found {
+		// Return 304 Not Modified if hash is found in cache
+		return c.NoContent(http.StatusNotModified)
+	}
+
+	// Image not found in cache, proceed to query the database
 	tx, err := dbConn.BeginTxx(ctx, nil)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to begin transaction: "+err.Error())
@@ -112,6 +161,13 @@ func getIconHandler(c echo.Context) error {
 			return echo.NewHTTPError(http.StatusInternalServerError, "failed to get user icon: "+err.Error())
 		}
 	}
+
+	hash := sha256.Sum256(image)
+	iconHash := fmt.Sprintf("%x", hash)
+
+	cacheMutex.Lock()
+	iconHashCache[iconHash] = image
+	cacheMutex.Unlock()
 
 	return c.Blob(http.StatusOK, "image/jpeg", image)
 }

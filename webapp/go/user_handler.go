@@ -112,10 +112,10 @@ func getIconHandler(c echo.Context) error {
 
 	cacheMutex.RLock()
 	fileName, found := iconHashCache[user.ID]
-	if !found {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get user icon: "+err.Error())
-	}
 	cacheMutex.RUnlock()
+	if !found {
+		return c.File(fallbackImage)
+	}
 	iconFilePath := fileName
 	image, err := os.ReadFile(iconFilePath)
 	if err != nil {

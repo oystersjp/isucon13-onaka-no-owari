@@ -507,8 +507,13 @@ INNER JOIN tags t ON t.id = lt.tag_id
 WHERE l.id = ?
 `
 	err = tx.SelectContext(ctx, &results, query, livestreamModel.ID)
-	if err != nil {
+	if errors.Is(err, sql.ErrNoRows) {
+		return Livestream{}, nil
+	} else if err != nil {
 		return Livestream{}, err
+	}
+	if len(results) == 0 {
+		return Livestream{}, nil
 	}
 
 	livestreamData := results[0].LivestreamModel

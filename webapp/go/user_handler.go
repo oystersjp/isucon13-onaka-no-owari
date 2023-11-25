@@ -118,7 +118,7 @@ type PostIconResponse struct {
 //}
 
 var (
-	iconHashCache = make(map[string][]byte)
+	iconHashCache = make(map[string]int64)
 	cacheMutex    sync.RWMutex
 )
 
@@ -126,7 +126,6 @@ func getIconHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 	username := c.Param("username")
 
-	// Check if If-None-Match header is present
 	ifNoneMatch := c.Request().Header.Get("If-None-Match")
 
 	cacheMutex.RLock()
@@ -134,11 +133,9 @@ func getIconHandler(c echo.Context) error {
 	cacheMutex.RUnlock()
 
 	if found {
-		// Return 304 Not Modified if hash is found in cache
 		return c.NoContent(http.StatusNotModified)
 	}
 
-	// Image not found in cache, proceed to query the database
 	tx, err := dbConn.BeginTxx(ctx, nil)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to begin transaction: "+err.Error())
@@ -166,7 +163,7 @@ func getIconHandler(c echo.Context) error {
 	iconHash := fmt.Sprintf("%x", hash)
 
 	cacheMutex.Lock()
-	iconHashCache[iconHash] = image
+	iconHashCache[iconHash] = 1
 	cacheMutex.Unlock()
 
 	return c.Blob(http.StatusOK, "image/jpeg", image)

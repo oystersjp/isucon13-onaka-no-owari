@@ -105,7 +105,7 @@ func getLivecommentsHandler(c echo.Context) error {
 	// livestreamを先に持っておいて、それを使い回す
 	livestreamModel := LivestreamModel{}
 	if err := tx.GetContext(ctx, &livestreamModel, "SELECT * FROM livestreams WHERE id = ?", livestreamID); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get livesream: "+err.Error())
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to fill livestream: "+err.Error())
 	}
 	liveStream, err := fillLivestreamResponseFromModel(ctx, tx, livestreamModel)
 	if err != nil {

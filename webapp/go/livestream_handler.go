@@ -510,9 +510,6 @@ WHERE l.id = ?
 	if err != nil {
 		return Livestream{}, err
 	}
-	if len(results) == 0 {
-		return Livestream{}, sql.ErrNoRows
-	}
 
 	livestreamData := results[0].LivestreamModel
 

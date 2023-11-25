@@ -454,9 +454,7 @@ func fillUserResponse(ctx context.Context, tx *sqlx.Tx, userModel UserModel) (Us
 	iconFilePath := fileName
 	image, err := os.ReadFile(iconFilePath)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return User{}, err
-		}
+		return User{}, err
 	}
 	iconHash := sha256.Sum256(image)
 

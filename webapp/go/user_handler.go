@@ -91,6 +91,12 @@ var (
 	cacheMutex    sync.RWMutex
 )
 
+func InitCache() {
+	cacheMutex.Lock()
+	iconHashCache = make(map[int64]string)
+	cacheMutex.Unlock()
+}
+
 func getIconHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 

@@ -42,3 +42,6 @@ pprof: PROF_FILE=~/pprof.samples.$(shell TZ=Asia/Tokyo date +"%H%M").$(shell git
 pprof:
 	curl -sSf "http://localhost:6060/debug/fgprof?seconds=$(TIME)" > $(PROF_FILE)
 	go tool pprof $(PROF_FILE)
+
+bench:
+	ssh isucon-bench "cd ~/isucon13/bench && ./bin/bench_linux_amd64 run --enable-ssl --target https://pipe.u.isucon.dev --nameserver 35.78.167.13 > bench.log 2>&1 && tail -n 10 bench.log"

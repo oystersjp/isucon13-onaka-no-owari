@@ -289,7 +289,7 @@ GROUP BY
 
 	// Scoreでソート
 	sort.Slice(rankedEntries, func(i, j int) bool {
-		return rankedEntries[i].Score > rankedEntries[j].Score
+		return rankedEntries[i].Score < rankedEntries[j].Score
 	})
 
 	// ランクを計算

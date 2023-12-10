@@ -115,11 +115,18 @@ func initializeHandler(c echo.Context) error {
 	}
 
 	c.Request().Header.Add("Content-Type", "application/json;charset=utf-8")
-	response, err := http.Post("http://isucon-s2:8080/api/initCacheHandler", "application/json", nil)
+	response, err := http.Post("http://isucon-s2:8080/api/initCache", "application/json", nil)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to initialize: "+err.Error())
 	}
 	defer response.Body.Close()
+
+	response2, err := http.Post("http://isucon-s2:8080/api/initTag", "application/json", nil)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to initialize: "+err.Error())
+	}
+	defer response2.Body.Close()
+
 	return c.JSON(http.StatusOK, InitializeResponse{
 		Language: "golang",
 	})
@@ -148,8 +155,8 @@ func main() {
 
 	// 初期化
 	e.POST("/api/initialize", initializeHandler)
-
-	e.POST("/api/initCacheHandler", initCacheHandler)
+	e.POST("/api/initCache", initCacheHandler)
+	e.POST("/api/initTag", initTagCache)
 
 	// top
 	e.GET("/api/tag", getTagHandler)

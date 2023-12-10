@@ -201,10 +201,9 @@ func postIconHandler(c echo.Context) error {
 	iconHash := sha256.Sum256(req.Image)
 	iconFileName := fmt.Sprintf("%x", iconHash)
 	iconFilePath := "/opt/icons/" + iconFileName
-	addIconHash(userID, iconFileName)
-
 	// 画像をファイルに保存
 	err = os.WriteFile(iconFilePath, req.Image, 0644)
+	addIconHash(userID, iconFilePath)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to save user icon: "+err.Error())
 	}
@@ -503,7 +502,7 @@ func fillUserResponse(ctx context.Context, tx *sqlx.Tx, userModel UserModel) (Us
 		return User{}, err
 	}
 	iconHash := sha256.Sum256(image)
-
+	addIconHashByUserName(userModel.Name, fmt.Sprintf("%x", iconHash))
 	user := User{
 		ID:          userModel.ID,
 		Name:        userModel.Name,

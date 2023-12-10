@@ -490,38 +490,54 @@ func fillLivestreamResponse(ctx context.Context, tx *sqlx.Tx, livestreamModel Li
 		return Livestream{}, err
 	}
 	owner, err := fillUserResponse(ctx, tx, ownerModel)
-	if err != nil {
-		return Livestream{}, err
+
+	type livestreamTagResult struct {
+		LivestreamModel
+		TagID   sql.NullInt64  `db:"tag_id"`
+		TagName sql.NullString `db:"tag_name"`
 	}
 
-	var livestreamTagModels []*LivestreamTagModel
-	if err := tx.SelectContext(ctx, &livestreamTagModels, "SELECT * FROM livestream_tags WHERE livestream_id = ?", livestreamModel.ID); err != nil {
+	// Execute the query to get livestream and associated tags.
+	var results []livestreamTagResult
+	query := `
+SELECT l.*, t.id AS tag_id, t.name AS tag_name
+FROM livestreams l
+LEFT JOIN livestream_tags lt ON lt.livestream_id = l.id
+INNER JOIN tags t ON t.id = lt.tag_id
+WHERE l.id = ?
+`
+	err = tx.SelectContext(ctx, &results, query, livestreamModel.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Livestream{}, nil
+	} else if err != nil {
 		return Livestream{}, err
 	}
+	if len(results) == 0 {
+		return Livestream{}, nil
+	}
 
-	tags := make([]Tag, len(livestreamTagModels))
-	for i := range livestreamTagModels {
-		tagModel := TagModel{}
-		if err := tx.GetContext(ctx, &tagModel, "SELECT * FROM tags WHERE id = ?", livestreamTagModels[i].TagID); err != nil {
-			return Livestream{}, err
-		}
+	livestreamData := results[0].LivestreamModel
 
-		tags[i] = Tag{
-			ID:   tagModel.ID,
-			Name: tagModel.Name,
+	var tags []Tag
+	for _, result := range results {
+		if result.TagID.Valid {
+			tags = append(tags, Tag{
+				ID:   result.TagID.Int64,
+				Name: result.TagName.String,
+			})
 		}
 	}
 
 	livestream := Livestream{
-		ID:           livestreamModel.ID,
+		ID:           livestreamData.ID,
 		Owner:        owner,
-		Title:        livestreamModel.Title,
+		Title:        livestreamData.Title,
+		Description:  livestreamData.Description,
+		PlaylistUrl:  livestreamData.PlaylistUrl,
+		ThumbnailUrl: livestreamData.ThumbnailUrl,
 		Tags:         tags,
-		Description:  livestreamModel.Description,
-		PlaylistUrl:  livestreamModel.PlaylistUrl,
-		ThumbnailUrl: livestreamModel.ThumbnailUrl,
-		StartAt:      livestreamModel.StartAt,
-		EndAt:        livestreamModel.EndAt,
+		StartAt:      livestreamData.StartAt,
+		EndAt:        livestreamData.EndAt,
 	}
 	return livestream, nil
 }

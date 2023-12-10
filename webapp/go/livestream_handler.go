@@ -506,7 +506,7 @@ func fillLivestreamResponses(ctx context.Context, tx *sqlx.Tx, models []*Livestr
 	if err := tx.SelectContext(ctx, &ownerModels, query, params...); err != nil {
 		return nil, err
 	}
-	var owners map[int64]User
+	owners := map[int64]User{}
 	for _, o := range ownerModels {
 		owner, err := fillUserResponse(ctx, tx, o)
 		if err != nil {
@@ -526,11 +526,11 @@ func fillLivestreamResponses(ctx context.Context, tx *sqlx.Tx, models []*Livestr
 	if err := tx.SelectContext(ctx, &lTagIdModels, query, params...); err != nil {
 		return nil, err
 	}
-	var lTagIds map[int64][]int64
+	lTagIds := map[int64][]int64{}
 	for _, t := range lTagIdModels {
 		lTagIds[t.LivestreamID] = append(lTagIds[t.LivestreamID], t.TagID)
 	}
-	var lTags map[int64][]Tag
+	lTags := map[int64][]Tag{}
 	for lId, tIds := range lTagIds {
 		tags := make([]Tag, len(tIds))
 		for i, tId := range tIds {

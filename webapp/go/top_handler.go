@@ -87,15 +87,16 @@ func initTagCache(c echo.Context) error {
 }
 
 func getTagHandler(c echo.Context) error {
-	tags := make([]*Tag, len(tagCache.tags))
 	tagCache.mu.RLock()
 	defer tagCache.mu.RUnlock()
-	for i := range tagCache.tags {
-		tags[i] = &Tag{
-			ID:   tagCache.tags[i].ID,
-			Name: tagCache.tags[i].Name,
-		}
+	tags := make([]*Tag, 0, len(tagCache.tags))
+	for _, tagModel := range tagCache.tags {
+		tags = append(tags, &Tag{
+			ID:   tagModel.ID,
+			Name: tagModel.Name,
+		})
 	}
+
 	return c.JSON(http.StatusOK, &TagsResponse{
 		Tags: tags,
 	})

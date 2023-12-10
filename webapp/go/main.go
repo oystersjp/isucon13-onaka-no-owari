@@ -115,7 +115,7 @@ func initializeHandler(c echo.Context) error {
 	}
 
 	c.Request().Header.Add("Content-Type", "application/json;charset=utf-8")
-	response, err := http.Post("isucon-s2:8080/api/initCacheHandler", "application/json", nil)
+	response, err := http.Post("http://isucon-s2:8080/api/initCacheHandler", "application/json", nil)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to initialize: "+err.Error())
 	}

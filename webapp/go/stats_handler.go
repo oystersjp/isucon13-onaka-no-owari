@@ -248,39 +248,57 @@ func getLivestreamStatisticsHandler(c echo.Context) error {
 		}
 	}
 
-	var livestreams []*LivestreamModel
-	if err := tx.SelectContext(ctx, &livestreams, "SELECT * FROM livestreams"); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get livestreams: "+err.Error())
+	// LivestreamModelWithCounts 構造体
+	type LivestreamModelWithCounts struct {
+		LivestreamModel
+		Reactions int64 `db:"reactions"`
+		TotalTips int64 `db:"total_tips"`
 	}
 
-	// ランク算出
-	var ranking LivestreamRanking
-	for _, livestream := range livestreams {
-		var reactions int64
-		if err := tx.GetContext(ctx, &reactions, "SELECT COUNT(*) FROM livestreams l INNER JOIN reactions r ON l.id = r.livestream_id WHERE l.id = ?", livestream.ID); err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to count reactions: "+err.Error())
-		}
+	// ランキング取得のSQLクエリ
+	query := `
+SELECT
+    l.*,
+    COUNT(DISTINCT r.id) AS reactions,
+    IFNULL(SUM(l2.tip), 0) AS total_tips
+FROM
+    livestreams l
+LEFT JOIN
+    reactions r ON l.id = r.livestream_id
+LEFT JOIN
+    livecomments l2 ON l.id = l2.livestream_id
+GROUP BY
+    l.id
+`
 
-		var totalTips int64
-		if err := tx.GetContext(ctx, &totalTips, "SELECT IFNULL(SUM(l2.tip), 0) FROM livestreams l INNER JOIN livecomments l2 ON l.id = l2.livestream_id WHERE l.id = ?", livestream.ID); err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to count tips: "+err.Error())
-		}
+	// ランキングを取得
+	var ranking []*LivestreamModelWithCounts
+	if err := tx.SelectContext(ctx, &ranking, query); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get livestream ranking: "+err.Error())
+	}
 
-		score := reactions + totalTips
-		ranking = append(ranking, LivestreamRankingEntry{
-			LivestreamID: livestream.ID,
+	// ランクを計算
+	var rankedEntries []LivestreamRankingEntry
+	for _, livestreamWithCounts := range ranking {
+		score := livestreamWithCounts.Reactions + livestreamWithCounts.TotalTips
+		rankedEntries = append(rankedEntries, LivestreamRankingEntry{
+			LivestreamID: livestreamWithCounts.ID,
 			Score:        score,
 		})
 	}
-	sort.Sort(ranking)
 
+	// Scoreでソート
+	sort.Slice(rankedEntries, func(i, j int) bool {
+		return rankedEntries[i].Score > rankedEntries[j].Score
+	})
+
+	// ランクを計算
 	var rank int64 = 1
-	for i := len(ranking) - 1; i >= 0; i-- {
-		entry := ranking[i]
+	for i, entry := range rankedEntries {
 		if entry.LivestreamID == livestreamID {
+			rank = int64(i) + 1
 			break
 		}
-		rank++
 	}
 
 	// 視聴者数算出

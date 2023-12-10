@@ -548,11 +548,16 @@ func fillLivestreamResponses(ctx context.Context, tx *sqlx.Tx, models []*Livestr
 
 	livestreams := make([]Livestream, len(models))
 	for i, m := range models {
+		tags, found := lTags[m.ID]
+		if !found {
+			tags = []Tag{}
+		}
+
 		livestreams[i] = Livestream{
 			ID:           m.ID,
 			Owner:        owners[m.UserID],
 			Title:        m.Title,
-			Tags:         lTags[m.ID],
+			Tags:         tags,
 			Description:  m.Description,
 			PlaylistUrl:  m.PlaylistUrl,
 			ThumbnailUrl: m.ThumbnailUrl,

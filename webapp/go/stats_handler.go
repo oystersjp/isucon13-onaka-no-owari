@@ -220,6 +220,12 @@ GROUP BY u.id`
 	return c.JSON(http.StatusOK, stats)
 }
 
+type LivestreamStats struct {
+	LivestreamID int64 `db:"livestream_id"`
+	Reactions    int64 `db:"reactions"`
+	TotalTips    int64 `db:"total_tips"`
+}
+
 func getLivestreamStatisticsHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -254,23 +260,31 @@ func getLivestreamStatisticsHandler(c echo.Context) error {
 	}
 
 	// ランク算出
-	var ranking LivestreamRanking
-	for _, livestream := range livestreams {
-		var reactions int64
-		if err := tx.GetContext(ctx, &reactions, "SELECT COUNT(*) FROM livestreams l INNER JOIN reactions r ON l.id = r.livestream_id WHERE l.id = ?", livestream.ID); err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to count reactions: "+err.Error())
-		}
+	var livestreamStats []LivestreamStats
+	query := `
+SELECT 
+    l.id AS livestream_id,
+    IFNULL(COUNT(r.id), 0) AS reactions,
+    IFNULL(SUM(lc.tip), 0) AS total_tips
+FROM 
+    livestreams l
+    LEFT JOIN reactions r ON l.id = r.livestream_id
+    LEFT JOIN livecomments lc ON l.id = lc.livestream_id
+GROUP BY 
+    l.id
+`
+	if err := tx.SelectContext(ctx, &livestreamStats, query); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get livestream stats: "+err.Error())
+	}
 
-		var totalTips int64
-		if err := tx.GetContext(ctx, &totalTips, "SELECT IFNULL(SUM(l2.tip), 0) FROM livestreams l INNER JOIN livecomments l2 ON l.id = l2.livestream_id WHERE l.id = ?", livestream.ID); err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to count tips: "+err.Error())
-		}
-
-		score := reactions + totalTips
-		ranking = append(ranking, LivestreamRankingEntry{
-			LivestreamID: livestream.ID,
+	// ランキングを作成
+	ranking := make(LivestreamRanking, len(livestreamStats))
+	for i, ls := range livestreamStats {
+		score := ls.Reactions + ls.TotalTips
+		ranking[i] = LivestreamRankingEntry{
+			LivestreamID: ls.LivestreamID,
 			Score:        score,
-		})
+		}
 	}
 	sort.Sort(ranking)
 

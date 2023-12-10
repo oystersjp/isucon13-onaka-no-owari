@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -87,20 +88,55 @@ type PostIconResponse struct {
 }
 
 var (
-	iconHashCache = make(map[int64]string)
-	cacheMutex    sync.RWMutex
+	iconHashCache           sync.Map
+	iconHashCacheByUserName sync.Map
 )
 
+// キャッシュにアイコンハッシュを追加する
+func addIconHash(id int64, hash string) {
+	iconHashCache.Store(id, hash)
+}
+
+// キャッシュからアイコンハッシュを取得する
+func getIconHash(id int64) (string, bool) {
+	hash, ok := iconHashCache.Load(id)
+	if ok {
+		return hash.(string), true
+	}
+	return "", false
+}
+
+// ユーザー名に基づいてキャッシュにアイコンハッシュを追加する
+func addIconHashByUserName(userName string, hash string) {
+	iconHashCacheByUserName.Store(userName, hash)
+}
+
+// ユーザー名に基づいてキャッシュからアイコンハッシュを取得する
+func getIconHashByUserName(userName string) (string, bool) {
+	hash, ok := iconHashCacheByUserName.Load(userName)
+	if ok {
+		return hash.(string), true
+	}
+	return "", false
+}
+
 func InitCache() {
-	cacheMutex.Lock()
-	iconHashCache = make(map[int64]string)
-	cacheMutex.Unlock()
+	iconHashCache = sync.Map{}
+	iconHashCacheByUserName = sync.Map{}
 }
 
 func getIconHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 
 	username := c.Param("username")
+
+	ifNoneMatch := c.Request().Header.Get("If-None-Match")
+
+	hash, found := getIconHashByUserName(username)
+
+	if found && hash == strings.Trim(ifNoneMatch, "\"") {
+		return c.NoContent(http.StatusNotModified)
+	}
 
 	tx, err := dbConn.BeginTxx(ctx, nil)
 	if err != nil {
@@ -116,9 +152,8 @@ func getIconHandler(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusInternalServerError, "failed to get user: "+err.Error())
 	}
 
-	cacheMutex.RLock()
-	fileName, found := iconHashCache[user.ID]
-	cacheMutex.RUnlock()
+	fileName, found := getIconHash(user.ID)
+
 	if !found {
 		return c.File(fallbackImage)
 	}
@@ -166,9 +201,7 @@ func postIconHandler(c echo.Context) error {
 	iconHash := sha256.Sum256(req.Image)
 	iconFileName := fmt.Sprintf("%x", iconHash)
 	iconFilePath := "/opt/icons/" + iconFileName
-	cacheMutex.Lock()
-	iconHashCache[userID] = iconFilePath
-	cacheMutex.Unlock()
+	addIconHash(userID, iconFileName)
 
 	// 画像をファイルに保存
 	err = os.WriteFile(iconFilePath, req.Image, 0644)
@@ -441,9 +474,8 @@ func fillUserResponse(ctx context.Context, tx *sqlx.Tx, userModel UserModel) (Us
 
 	var image []byte
 
-	cacheMutex.RLock()
-	fileName, found := iconHashCache[userModel.ID]
-	cacheMutex.RUnlock()
+	fileName, found := getIconHash(userModel.ID)
+
 	if !found {
 		image, err := os.ReadFile(fallbackImage)
 		if err != nil {
@@ -461,6 +493,7 @@ func fillUserResponse(ctx context.Context, tx *sqlx.Tx, userModel UserModel) (Us
 			IconHash: fmt.Sprintf("%x", sha256.Sum256(image)),
 		}
 
+		addIconHashByUserName(userModel.Name, fmt.Sprintf("%x", sha256.Sum256(image)))
 		return user, nil
 	}
 

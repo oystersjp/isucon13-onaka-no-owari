@@ -60,6 +60,19 @@ type ThemeModel struct {
 	DarkMode bool  `db:"dark_mode"`
 }
 
+var themeCache sync.Map
+
+func AddThemeToCache(theme ThemeModel) {
+	themeCache.Store(theme.UserID, theme)
+}
+func GetThemeFromCache(userID int64) (ThemeModel, bool) {
+	value, ok := themeCache.Load(userID)
+	if ok {
+		return value.(ThemeModel), true
+	}
+	return ThemeModel{}, false
+}
+
 type PostUserRequest struct {
 	Name        string `json:"name"`
 	DisplayName string `json:"display_name"`
@@ -121,6 +134,7 @@ func getIconHashByUserName(userName string) (string, bool) {
 }
 
 func InitCache() {
+	themeCache = sync.Map{}
 	iconHashCache = sync.Map{}
 	iconHashCacheByUserName = sync.Map{}
 }
@@ -201,6 +215,7 @@ func postIconHandler(c echo.Context) error {
 	iconHash := sha256.Sum256(req.Image)
 	iconFileName := fmt.Sprintf("%x", iconHash)
 	iconFilePath := "/opt/icons/" + iconFileName
+
 	// 画像をファイルに保存
 	err = os.WriteFile(iconFilePath, req.Image, 0644)
 	addIconHash(userID, iconFilePath)
@@ -319,9 +334,7 @@ func registerHandler(c echo.Context) error {
 		UserID:   userID,
 		DarkMode: req.Theme.DarkMode,
 	}
-	if _, err := tx.NamedExecContext(ctx, "INSERT INTO themes (user_id, dark_mode) VALUES(:user_id, :dark_mode)", themeModel); err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to insert user theme: "+err.Error())
-	}
+	AddThemeToCache(themeModel)
 
 	if out, err := exec.Command("pdnsutil", "add-record", "u.isucon.dev", req.Name, "A", "0", powerDNSSubdomainAddress).CombinedOutput(); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, string(out)+": "+err.Error())
@@ -466,11 +479,7 @@ func verifyUserSession(c echo.Context) error {
 }
 
 func fillUserResponse(ctx context.Context, tx *sqlx.Tx, userModel UserModel) (User, error) {
-	themeModel := ThemeModel{}
-	if err := tx.GetContext(ctx, &themeModel, "SELECT * FROM themes WHERE user_id = ?", userModel.ID); err != nil {
-		return User{}, err
-	}
-
+	themeModel, _ := GetThemeFromCache(userModel.ID)
 	var image []byte
 
 	fileName, found := getIconHash(userModel.ID)
